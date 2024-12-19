@@ -1,11 +1,10 @@
+from genericpath import isfile
 from random import shuffle
 import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import layers
 from tensorflow.keras.layers import Dropout
 from tensorflow.keras.models import Sequential
-
-
 import numpy as np
 import matplotlib.pyplot as plt
 from PIL import Image
@@ -44,44 +43,52 @@ def scale_image(directory):
         image.save(path)
 
 
-def build_model(batch_size, img_height, img_width, epochs):
-   
-    data_dir = "D:\Visual Studio stuff\Projekts\MachineLearning\ClassificationModel\Images"
+def normalize(data):
+    normalized_data = data/255
+    print(normalized_data)
+    return normalized_data
 
-    train_ds = tf.keras.utils.image_dataset_from_directory(
-      data_dir,
-      validation_split=0.2,
-      subset="training",
-      seed=123,
-      shuffle=True,
-      image_size=(img_height, img_width),
-      batch_size=batch_size)
 
-    val_ds = tf.keras.utils.image_dataset_from_directory(
-      data_dir,
-      validation_split=0.2,
-      subset="validation",
-      seed=123,
-      shuffle=True,
-      image_size=(img_height, img_width),
-      batch_size=batch_size)
+def plot_image(image):
+    image = normalize(image)
+    plt.imshow(image)
+    plt.show()
 
-    class_names = train_ds.class_names
-    print(class_names)
 
+def load_image(image_path, img_height, img_width):
+    img = tf.keras.utils.load_img(
+        image_path, target_size=(img_height, img_width)
+    )
+    img_array = tf.keras.utils.img_to_array(img)
+    img_array = tf.expand_dims(img_array, 0) # Create a batch
+    return img_array
+
+
+def get_data(path, batch_size):
+    data = tf.keras.utils.image_dataset_from_directory(
+        path,
+        validation_split=0.2,
+        subset="training",
+        seed=123,
+        shuffle=True,
+        image_size=(img_height, img_width),
+        batch_size=batch_size)
+
+    class_names = data.class_names
+    
     AUTOTUNE = tf.data.AUTOTUNE
+    train_size = int(len(data) * 0.7)
+    val_size = int(len(data) * 0.3)
 
-    train_ds = train_ds.cache().shuffle(1000).prefetch(buffer_size=AUTOTUNE)
-    val_ds = val_ds.cache().prefetch(buffer_size=AUTOTUNE)
+    train_ds = data.take(train_size).shuffle(1000).prefetch(buffer_size=AUTOTUNE)
+    val_ds = data.skip(train_size).take(val_size).prefetch(buffer_size=AUTOTUNE)
 
-    normalization_layer = layers.Rescaling(1./255)
+    return train_ds, val_ds, class_names
 
-    normalized_ds = train_ds.map(lambda x, y: (normalization_layer(x), y))
-    image_batch, labels_batch = next(iter(normalized_ds))
-    first_image = image_batch[0]
-    # Notice the pixel values are now in `[0,1]`.
-    print(np.min(first_image), np.max(first_image))
 
+def build_model(path, img_height, img_width, epochs, batch_size):
+   
+    train_ds, val_ds, class_names = get_data(data_dir, batch_size)
     num_classes = len(class_names)
 
     model = Sequential([
@@ -96,7 +103,6 @@ def build_model(batch_size, img_height, img_width, epochs):
       layers.Dense(num_classes)
     ])
 
-
     model.compile(optimizer='adam',
                   loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),
                   metrics=['accuracy'])
@@ -104,34 +110,34 @@ def build_model(batch_size, img_height, img_width, epochs):
     model.summary()
 
     history = model.fit(
-      train_ds,
-      validation_data=val_ds,
-      epochs=epochs
+        train_ds,
+        validation_data=val_ds,
+        epochs=epochs
     )
 
     show_results(history, epochs)
+
     return model, class_names
 
-#scale_image("D:\Visual Studio stuff\Projekts\MachineLearning\ClassificationModel\Images\Cats")
 
-batch_size = 80
+batch_size = 32
 img_height = 250
 img_width = 250
 epochs = 10
 
-model, class_names = build_model(batch_size, img_height, img_width, epochs);
+data_dir = "D:\Visual Studio stuff\Projekts\MachineLearning\ClassificationModel\Images"
+model, class_names = build_model(data_dir, img_height, img_width, epochs, batch_size);
 
-image_path = "cat.jpg"
-img = tf.keras.utils.load_img(
-    image_path, target_size=(img_height, img_width)
-)
-img_array = tf.keras.utils.img_to_array(img)
-img_array = tf.expand_dims(img_array, 0) # Create a batch
 
-predictions = model.predict(img_array)
-score = tf.nn.softmax(predictions[0])
+test_data_path = "D:\\Visual Studio stuff\\Projekts\\MachineLearning\\ClassificationModel\\ClassificationModel\\Unknown"
+test_data = [file for file in os.listdir(test_data_path) if os.path.isfile(os.path.join(test_data_path, file))]
 
-print(
-    "This image most likely belongs to {} with a {:.2f} percent confidence."
-    .format(class_names[np.argmax(score)], 100 * np.max(score))
-)
+for file in test_data:
+    image_data = load_image(os.path.join(test_data_path, file), img_height, img_width)
+    predictions = model.predict(image_data)
+    score = tf.nn.softmax(predictions[0])
+
+    print(
+        "This image {} most likely belongs to {} with a {:.2f} percent confidence."
+        .format(file, class_names[np.argmax(score)], 100 * np.max(score))
+    )
