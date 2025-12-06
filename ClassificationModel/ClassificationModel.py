@@ -1,10 +1,7 @@
+from asyncio.windows_events import NULL
 from genericpath import isfile
 from random import shuffle
 import tensorflow as tf
-from tensorflow import keras
-from tensorflow.keras import layers
-from tensorflow.keras.layers import Dropout
-from tensorflow.keras.models import Sequential
 import numpy as np
 import matplotlib.pyplot as plt
 from PIL import Image
@@ -105,14 +102,13 @@ def get_data(path, batch_size):
 
 
 # Compile and fit the model 
-def build_model(path, img_height, img_width, epochs, batch_size):
+def build_model(img_height, img_width, epochs, train_ds, val_ds, class_names):
    
-    train_ds, val_ds, class_names = get_data(data_dir, batch_size)
     num_classes = len(class_names)
 
     # Get the sequential model to use
     model = models.model_1(img_height, img_width, num_classes)
-    model.compile(optimizer=keras.optimizers.Adam(learning_rate=0.001, clipvalue=1.0), 
+    model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=0.001, clipvalue=1.0), 
                   loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),
                   metrics=['accuracy'],
     )
@@ -121,7 +117,7 @@ def build_model(path, img_height, img_width, epochs, batch_size):
 
     # Fit the model on training data
     early_stopping = tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=5, restore_best_weights=True)
-    class_weights = {0: 1.0, 1: 1.5, 2: 1.2}
+    class_weights = {0: 1.0, 1: 1.5}
 
     history = model.fit(
         train_ds,
@@ -133,9 +129,16 @@ def build_model(path, img_height, img_width, epochs, batch_size):
 
     show_results(history)
 
-    return model, class_names
+    model.save("cat_model.keras")
+
+    return model
+
+def representative_dataset(training_data):
+    for i in training_data[:100]:
+        yield [i.astype("float32")]
 
 
+ 
 
 # Load test data and predict labels
 batch_size = 32
@@ -144,9 +147,20 @@ img_width = 256
 epochs = 50
 
 data_dir = "D:\Visual Studio stuff\Projekts\MachineLearning\ClassificationModel\Images"
-model, class_names = build_model(data_dir, img_height, img_width, epochs, batch_size);
+train_ds, val_ds, class_names = get_data(data_dir, batch_size)
+
+try:
+    model = tf.keras.models.load_model("D:\Visual Studio stuff\Projekts\MachineLearning\ClassificationModel\ClassificationModel\cat_model.keras")
+except:
+    model= build_model(img_height, img_width, epochs, train_ds, val_ds, class_names);
 
 
+converter = tf.lite.TFLiteConverter.from_keras_model(model)
+tflite_model = converter.convert()
+open("model.tflite", "wb").write(tflite_model)
+
+
+# test model on unknown pictures
 test_data_path = "D:\\Visual Studio stuff\\Projekts\\MachineLearning\\ClassificationModel\\ClassificationModel\\Unknown"
 scale_image(test_data_path)
 test_data = [file for file in os.listdir(test_data_path) if os.path.isfile(os.path.join(test_data_path, file))]
@@ -157,8 +171,8 @@ for file in test_data:
     print(predictions)
     score = tf.nn.softmax(predictions[0])
   
-    print("Predicted scores: Cat {:.4f}, Dog {:.4f}, My Cat {:.4f}"
-          .format(score[0], score[1], score[2]))
+    print("Predicted scores: Cat {:.4f}, My Cat {:.4f}"
+          .format(score[0], score[1]))
     print("The image {} most likely belongs to {} with a {:.2f} percent confidence." 
           .format(file, class_names[np.argmax(score)], 100 * np.max(score))
     )

@@ -1,5 +1,4 @@
 import tensorflow as tf
-from tensorflow import keras
 from tensorflow.keras import layers
 from tensorflow.keras.models import Sequential
 
@@ -7,7 +6,7 @@ from tensorflow.keras.models import Sequential
 def model_1(img_height, img_width, num_classes):
 
     # Adding random data augmentation of existing training data to prevent overfitting
-    data_augmentation = keras.Sequential(
+    data_augmentation = tf.keras.Sequential(
         [
             layers.Rescaling(1./255),
             layers.RandomFlip("horizontal"),
@@ -20,9 +19,11 @@ def model_1(img_height, img_width, num_classes):
     # MaxPooling downsizes the amount of parameters by taking the max value of the window defined by pool size
     # Dropout randomly sets input to 0 to prevent overfitting the model. Only applies when training is set to True in call().
     # Flatten converts the input to one dimension which is required input for fully connected layers like Dense.
+    normalizer = tf.keras.layers.Normalization(axis=-1)
 
     model = Sequential([
-        keras.Input(shape=(img_height, img_width, 3)),
+        tf.keras.Input(shape=(img_height, img_width, 3)),
+        normalizer,
         data_augmentation,
         layers.Conv2D(filters=16, kernel_size=(3,3), padding='same', activation='relu'),
         layers.MaxPooling2D(pool_size=(2, 2)),
@@ -43,7 +44,7 @@ def model_1(img_height, img_width, num_classes):
 def model_2(img_height, img_width, num_classes):
 
     # Adding random data augmentation of existing training data to prevent overfitting
-    data_augmentation = keras.Sequential(
+    data_augmentation = tf.keras.Sequential(
         [
             layers.Rescaling(1./255),
             layers.RandomFlip("horizontal"),
@@ -52,9 +53,12 @@ def model_2(img_height, img_width, num_classes):
         ]
     )
 
-    model = keras.Sequential()
-    model.add(keras.Input(shape=(img_height, img_width, 3))) 
-    model.add(data_augmentation),
+    normalizer = tf.keras.layers.Normalization(axis=-1)
+
+    model = tf.keras.Sequential()
+    model.add(tf.keras.Input(shape=(img_height, img_width, 3))) 
+    model.add(normalizer)
+    model.add(data_augmentation)
     model.add(layers.Conv2D(32, 5, strides=2, activation="relu"))
     model.add(layers.Conv2D(32, 3, activation="relu"))
     model.add(layers.MaxPooling2D(3))
